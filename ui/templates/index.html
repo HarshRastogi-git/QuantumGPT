@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuantumGPT v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@300;400;500&family=Geist:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+
+  <div class="sb-head">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6.5" stroke="#C8965A" stroke-width="1"/>
+          <circle cx="8" cy="8" r="3"   stroke="#C8965A" stroke-width="1"/>
+          <circle cx="8" cy="8" r="1"   fill="#C8965A"/>
+          <line x1="8" y1="1.5" x2="8" y2="4"   stroke="#C8965A" stroke-width="1" stroke-linecap="round"/>
+          <line x1="8" y1="12"  x2="8" y2="14.5" stroke="#C8965A" stroke-width="1" stroke-linecap="round"/>
+          <line x1="1.5" y1="8" x2="4"  y2="8"   stroke="#C8965A" stroke-width="1" stroke-linecap="round"/>
+          <line x1="12"  y1="8" x2="14.5" y2="8" stroke="#C8965A" stroke-width="1" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <p class="brand-name">QuantumGPT <span class="brand-v">v2</span></p>
+        <p class="brand-sub">Adaptive Gated Head Pruning</p>
+      </div>
+    </div>
+    <button class="icon-btn" id="collapseBtn">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M2 3.5h10M2 7h10M2 10.5h10" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Checkpoint -->
+  <div class="sb-section">
+    <p class="sb-label">Checkpoint</p>
+    <div class="ckpt-list">
+      <button class="ckpt-btn" data-label="gated"    onclick="loadModel('gated')">
+        <span class="ckpt-pip active-pip"></span>
+        <span class="ckpt-text">
+          <span class="ckpt-name">Gated model</span>
+          <span class="ckpt-desc">structural pruning</span>
+        </span>
+      </button>
+      <button class="ckpt-btn" data-label="baseline" onclick="loadModel('baseline')">
+        <span class="ckpt-pip"></span>
+        <span class="ckpt-text">
+          <span class="ckpt-name">Baseline model</span>
+          <span class="ckpt-desc">dense, no gates</span>
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="sb-section">
+    <p class="sb-label">Model</p>
+    <div class="stat-grid">
+      <div class="stat-cell"><span class="stat-n" id="sParams">—</span><span class="stat-d">params</span></div>
+      <div class="stat-cell"><span class="stat-n" id="sSize">—</span><span class="stat-d">MB</span></div>
+      <div class="stat-cell"><span class="stat-n gold" id="sLive">—</span><span class="stat-d">live heads</span></div>
+      <div class="stat-cell"><span class="stat-n" id="sPPL">—</span><span class="stat-d">perplexity</span></div>
+    </div>
+    <div class="arch-row">
+      <span id="archStr" class="arch-str">—</span>
+    </div>
+  </div>
+
+  <!-- Gate heatmap -->
+  <div class="sb-section">
+    <p class="sb-label">
+      Head gate activity
+      <span class="sb-hint">gold = active · dark = dead</span>
+    </p>
+    <div class="heatmap" id="heatmap"></div>
+    <div class="heatmap-legend">
+      <span>0.0</span>
+      <div class="legend-bar"></div>
+      <span>1.0</span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="sb-section">
+    <p class="sb-label">Generation</p>
+    <div class="ctrl-list">
+      <div class="ctrl">
+        <label class="ctrl-lbl"><span>Tokens</span><span class="ctrl-val" id="lblTok">300</span></label>
+        <input type="range" id="slTok" min="50" max="600" value="300" step="10"
+               oninput="$('lblTok').textContent=this.value">
+      </div>
+      <div class="ctrl">
+        <label class="ctrl-lbl"><span>Temperature</span><span class="ctrl-val" id="lblTemp">0.80</span></label>
+        <input type="range" id="slTemp" min="0.1" max="2.0" value="0.8" step="0.05"
+               oninput="$('lblTemp').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+      <div class="ctrl">
+        <label class="ctrl-lbl"><span>Top-k</span><span class="ctrl-val" id="lblK">50</span></label>
+        <input type="range" id="slK" min="1" max="200" value="50" step="1"
+               oninput="$('lblK').textContent=this.value">
+      </div>
+      <div class="ctrl">
+        <label class="ctrl-lbl"><span>Top-p</span><span class="ctrl-val" id="lblP">0.95</span></label>
+        <input type="range" id="slP" min="0.5" max="1.0" value="0.95" step="0.01"
+               oninput="$('lblP').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+      <div class="ctrl-row-inline">
+        <span class="ctrl-lbl-txt">Greedy decode</span>
+        <label class="tog"><input type="checkbox" id="chkGreedy"><span class="tog-tr"><span class="tog-th"></span></span></label>
+      </div>
+      <div class="ctrl-row-inline">
+        <span class="ctrl-lbl-txt">Stream tokens</span>
+        <label class="tog"><input type="checkbox" id="chkStream" checked><span class="tog-tr"><span class="tog-th"></span></span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick prompts -->
+  <div class="sb-section">
+    <p class="sb-label">Quick prompts</p>
+    <div class="qp-list">
+      <button class="qp" onclick="usePrompt('To be, or not to be, that is the question:')">To be, or not to be</button>
+      <button class="qp" onclick="usePrompt(`All the world's a stage, and all the men and women`)">All the world's a stage</button>
+      <button class="qp" onclick="usePrompt('Friends, Romans, countrymen, lend me your ears;')">Friends, Romans, countrymen</button>
+      <button class="qp" onclick="usePrompt('Is this a dagger which I see before me,')">Is this a dagger</button>
+      <button class="qp" onclick="usePrompt('Now is the winter of our discontent')">Now is the winter</button>
+      <button class="qp" onclick="usePrompt('It was the best of times, it was the worst of times')">Best of times</button>
+    </div>
+  </div>
+
+  <!-- Gates panel trigger -->
+  <div class="sb-section">
+    <p class="sb-label">Analysis</p>
+    <button class="outline-btn" onclick="openGates()">Inspect head gates</button>
+    <button class="outline-btn" style="margin-top:6px" onclick="openAblation()">Ablation results</button>
+  </div>
+
+  <div class="sb-foot">
+    <p>QuantumGPT v2 · pure PyTorch · no external ML libs</p>
+    <p id="footArch">—</p>
+  </div>
+
+</aside>
+
+<!-- ── Main ─────────────────────────────────────────────────────── -->
+<main class="main" id="main">
+
+  <header class="topbar">
+    <button class="icon-btn" id="menuBtn">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <path d="M1.5 3.5h12M1.5 7.5h12M1.5 11.5h12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div class="topbar-center">
+      <span class="model-pill" id="topLabel">Loading…</span>
+      <span class="status-dot" id="statusDot"></span>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" onclick="clearChat()" title="Clear">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <path d="M1 1l11 11M12 1L1 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="icon-btn" onclick="openGates()" title="Head gates">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="1" y="1" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <rect x="9" y="1" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <rect x="1" y="9" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <rect x="9" y="9" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.1"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="chat" id="chat">
+
+    <!-- Welcome -->
+    <div class="welcome" id="welcome">
+      <div class="welcome-body">
+        <div class="welcome-orb" id="welcomeOrb">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <circle cx="28" cy="28" r="26" stroke="#C8965A" stroke-width="1" stroke-dasharray="5 3" opacity="0.6"/>
+            <circle cx="28" cy="28" r="16" stroke="#C8965A" stroke-width="1" opacity="0.4"/>
+            <circle cx="28" cy="28" r="6"  stroke="#C8965A" stroke-width="1.5"/>
+            <circle cx="28" cy="28" r="2"  fill="#C8965A"/>
+          </svg>
+        </div>
+        <h1 class="welcome-title">QuantumGPT v2</h1>
+        <p class="welcome-tag">Adaptive Gated Head Pruning · BPE Tokeniser · Structural Compression</p>
+        <p class="welcome-desc">
+          A decoder-only language model where each attention head owns a learnable
+          gate. Gates polarise toward zero or one during training. Dead heads are
+          physically removed — shrinking weight matrices and eliminating runtime
+          overhead without any post-training fine-tuning.
+        </p>
+        <div class="welcome-actions">
+          <button class="chip" onclick="usePrompt('To be, or not to be, that is the question:')">Try a prompt</button>
+          <button class="chip" onclick="openGates()">View head gates</button>
+          <button class="chip" onclick="openAblation()">Ablation results</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="messages" id="messages"></div>
+  </div>
+
+  <!-- Input -->
+  <div class="input-wrap">
+    <div class="input-box" id="inputBox">
+      <textarea id="promptTa" class="prompt-ta" placeholder="Enter a prompt — QuantumGPT will continue it…"
+        rows="1" onkeydown="handleKey(event)" oninput="onTaInput(this)"></textarea>
+      <div class="input-side">
+        <span class="char-ct" id="charCt">0</span>
+        <button class="send-btn" id="sendBtn" onclick="send()">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <path d="M13 7.5H2M9 3l4 4.5L9 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <p class="input-hint">↵ generate · Shift+↵ newline · output continues the prompt</p>
+  </div>
+
+</main>
+
+<!-- ── Gate panel ─────────────────────────────────────────────── -->
+<div class="overlay" id="gateOverlay" onclick="closeGates()"></div>
+<div class="side-panel" id="gatePanel">
+  <div class="panel-head">
+    <h2 class="panel-title">Head Gate Inspector</h2>
+    <button class="icon-btn" onclick="closeGates()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+  <div class="panel-body" id="gatePanelBody"><p class="panel-hint">Loading…</p></div>
+</div>
+
+<!-- ── Ablation panel ──────────────────────────────────────────── -->
+<div class="overlay" id="ablOverlay" onclick="closeAblation()"></div>
+<div class="bottom-panel" id="ablPanel">
+  <div class="panel-head">
+    <h2 class="panel-title">Ablation Results</h2>
+    <button class="icon-btn" onclick="closeAblation()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+  <div class="panel-body" id="ablBody"><p class="panel-hint">Loading ablation_results.json…</p></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
